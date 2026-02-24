@@ -22,24 +22,46 @@ _clip_preprocess = None
 def _load_text_model(model_name: str):
     global _text_model
     if _text_model is None:
-        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+        try:
+            from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
-        logger.info("Loading text embedding model: %s", model_name)
-        _text_model = SentenceTransformer(model_name)
+            logger.info("Loading text embedding model: %s", model_name)
+            _text_model = SentenceTransformer(model_name)
+        except Exception as e:
+            err = str(e).lower()
+            if "huggingface.co" in err or "couldn't connect" in err or "connection" in err:
+                raise RuntimeError(
+                    "Could not download the text embedding model from Hugging Face. "
+                    "Check your internet connection and try again. "
+                    "For offline use: run the app once with internet to cache models, "
+                    "then set HF_HUB_OFFLINE=1 in your .env."
+                ) from e
+            raise
     return _text_model
 
 
 def _load_clip(clip_model: str, clip_pretrained: str):
     global _clip_model, _clip_preprocess
     if _clip_model is None:
-        import open_clip  # noqa: PLC0415
+        try:
+            import open_clip  # noqa: PLC0415
 
-        logger.info("Loading CLIP model: %s/%s", clip_model, clip_pretrained)
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        _clip_model, _, _clip_preprocess = open_clip.create_model_and_transforms(
-            clip_model, pretrained=clip_pretrained, device=device
-        )
-        _clip_model.eval()
+            logger.info("Loading CLIP model: %s/%s", clip_model, clip_pretrained)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            _clip_model, _, _clip_preprocess = open_clip.create_model_and_transforms(
+                clip_model, pretrained=clip_pretrained, device=device
+            )
+            _clip_model.eval()
+        except Exception as e:
+            err = str(e).lower()
+            if "huggingface.co" in err or "couldn't connect" in err or "connection" in err:
+                raise RuntimeError(
+                    "Could not download the CLIP model from Hugging Face. "
+                    "Check your internet connection and try again. "
+                    "For offline use: run the app once with internet to cache models, "
+                    "then set HF_HUB_OFFLINE=1 in your .env."
+                ) from e
+            raise
     return _clip_model, _clip_preprocess
 
 
@@ -118,7 +140,10 @@ class EmbeddingService:
             image_vector: CLIP image embedding (or None → zero vector).
             metadata: Payload dict (speaker, timestamps, video_id, …).
         """
-        from qdrant_client.http.models import PointStruct  # noqa: PLC0415
+        try:
+            from qdrant_client.http.models.models import PointStruct  # noqa: PLC0415
+        except ImportError:
+            from qdrant_client.http.models import PointStruct  # noqa: PLC0415
         from app.services.qdrant_service import IMAGE_DIM  # noqa: PLC0415
 
         img_vec = image_vector if image_vector else [0.0] * IMAGE_DIM
@@ -148,7 +173,10 @@ class EmbeddingService:
             image_vector: CLIP image embedding (or None → zero vector).
             metadata: Payload dict (pdf_id, page_number, …).
         """
-        from qdrant_client.http.models import PointStruct  # noqa: PLC0415
+        try:
+            from qdrant_client.http.models.models import PointStruct  # noqa: PLC0415
+        except ImportError:
+            from qdrant_client.http.models import PointStruct  # noqa: PLC0415
         from app.services.qdrant_service import IMAGE_DIM  # noqa: PLC0415
 
         img_vec = image_vector if image_vector else [0.0] * IMAGE_DIM

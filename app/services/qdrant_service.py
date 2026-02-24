@@ -9,12 +9,6 @@ import logging
 from typing import Optional
 
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import (
-    Distance,
-    NamedVectorParams,
-    VectorParams,
-    VectorsConfig,
-)
 
 from app.config import get_settings
 
@@ -51,11 +45,14 @@ def get_qdrant_client() -> QdrantClient:
     return _client
 
 
-def _dual_vector_config() -> VectorsConfig:
-    """Return a VectorsConfig with 'text' and 'image' named vectors."""
+def _dual_vector_config() -> dict:
+    """Return a vectors_config dict with 'text' and 'image' named vectors.
+    Uses plain dicts to avoid importing from qdrant_client.http.models (avoids
+    NamedVectorParams import errors in some qdrant-client versions).
+    """
     return {
-        "text": VectorParams(size=TEXT_DIM, distance=Distance.COSINE),
-        "image": VectorParams(size=IMAGE_DIM, distance=Distance.COSINE),
+        "text": {"size": TEXT_DIM, "distance": "Cosine"},
+        "image": {"size": IMAGE_DIM, "distance": "Cosine"},
     }
 
 

@@ -74,8 +74,13 @@ streamlit run app/app.py
 | `QDRANT_HOST` / `QDRANT_PORT` | Qdrant server location |
 | `OPENAI_API_KEY` | For RAG answer generation |
 | `OPENAI_MODEL` | LLM model name (default: `gpt-4o-mini`) |
-| `HUGGINGFACE_TOKEN` | For pyannote.audio speaker diarization |
+| `HUGGINGFACE_TOKEN` | For pyannote.audio speaker diarization (only if not using Deepgram) |
+| `DEEPGRAM_API_KEY` | **Optional.** If set, use Deepgram for transcription + diarization instead of Whisper + pyannote (no HuggingFace token needed) |
+| `DEEPGRAM_MODEL` | Deepgram model when using API (default: `nova-2`) |
 | `TESSERACT_CMD` | Path to tesseract binary (Windows) |
+| `HF_HUB_OFFLINE` | Set to `1` to use only cached Hugging Face models (no network). Run once with internet first to cache models. |
+
+**Internet / offline:** The first run downloads embedding and optional caption models from Hugging Face. If you see a connection error, check your internet connection or firewall (access to `huggingface.co`). For offline use, run the app once with internet so models are cached, then set `HF_HUB_OFFLINE=1` in `.env`.
 
 ## Features
 

@@ -40,8 +40,12 @@ class Settings(BaseSettings):
     openai_model: str = Field(default="gpt-4o-mini")
     openai_base_url: Optional[str] = Field(default=None)
 
-    # ── HuggingFace ───────────────────────────────────────────────────────────
+    # ── HuggingFace (pyannote diarization) ─────────────────────────────────────
     huggingface_token: Optional[str] = Field(default=None)
+
+    # ── Deepgram (transcription + diarization alternative to Whisper + pyannote) ─
+    deepgram_api_key: Optional[str] = Field(default=None)
+    deepgram_model: str = Field(default="nova-2", description="Deepgram model when using API")
 
     # ── Models ────────────────────────────────────────────────────────────────
     text_embedding_model: str = Field(

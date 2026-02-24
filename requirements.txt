@@ -8,8 +8,8 @@ pydantic-settings>=2.2.0
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.9
 
-# Vector DB
-qdrant-client>=1.8.0
+# Vector DB (use >=1.12 to avoid NamedVectorParams import issues in some 1.8.x builds)
+qdrant-client>=1.12.0
 
 # Embeddings
 sentence-transformers>=2.6.0
@@ -24,6 +24,8 @@ open-clip-torch>=2.24.0
 # YouTube / Audio
 yt-dlp>=2024.3.10
 openai-whisper>=20231117
+# Optional: use Deepgram for transcription + diarization (no Whisper/pyannote needed)
+deepgram-sdk>=3.0.0
 
 # Speaker Diarization
 pyannote.audio>=3.1.1

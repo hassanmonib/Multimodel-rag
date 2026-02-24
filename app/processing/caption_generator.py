@@ -1,6 +1,7 @@
 """
 Image captioning using Salesforce BLIP (blip-image-captioning-base).
 Heavy model is lazy-loaded and cached as a module-level singleton.
+If the model fails to load (e.g. network, wrong config), captioning is skipped and generate() returns "".
 """
 from __future__ import annotations
 
@@ -14,23 +15,39 @@ logger = logging.getLogger(__name__)
 
 _processor = None
 _model = None
+_blip_load_attempted = False
 
 
 def _load_blip(model_name: str) -> None:
-    """Load BLIP processor and model into module-level singletons."""
-    global _processor, _model
+    """Load BLIP processor and model into module-level singletons. On failure, captioning is disabled."""
+    global _processor, _model, _blip_load_attempted
     if _processor is not None:
         return
+    if _blip_load_attempted:
+        return
 
-    from transformers import BlipForConditionalGeneration, BlipProcessor  # noqa: PLC0415
+    _blip_load_attempted = True
+    try:
+        from transformers import AutoProcessor, BlipForConditionalGeneration, BlipProcessor  # noqa: PLC0415
 
-    logger.info("Loading BLIP caption model: %s", model_name)
-    _processor = BlipProcessor.from_pretrained(model_name)
-    _model = BlipForConditionalGeneration.from_pretrained(model_name)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    _model = _model.to(device)
-    _model.eval()
-    logger.info("BLIP model loaded on device=%s", device)
+        logger.info("Loading BLIP caption model: %s", model_name)
+        try:
+            _processor = BlipProcessor.from_pretrained(model_name)
+        except Exception:
+            _processor = AutoProcessor.from_pretrained(model_name)
+        _model = BlipForConditionalGeneration.from_pretrained(model_name)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        _model = _model.to(device)
+        _model.eval()
+        logger.info("BLIP model loaded on device=%s", device)
+    except Exception as exc:
+        logger.warning(
+            "BLIP caption model failed to load (%s). Captioning disabled. Error: %s",
+            model_name,
+            exc,
+        )
+        _processor = None
+        _model = None
 
 
 class CaptionGenerator:
@@ -64,6 +81,9 @@ class CaptionGenerator:
             Caption string. Empty string on failure.
         """
         global _processor, _model
+        if _processor is None or _model is None:
+            return ""
+
         try:
             if image.mode not in ("RGB",):
                 image = image.convert("RGB")

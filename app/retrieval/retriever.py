@@ -7,7 +7,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from qdrant_client.http.models import Filter, FieldCondition, MatchValue
+try:
+    from qdrant_client.http.models.models import Filter, FieldCondition, MatchValue
+except ImportError:
+    from qdrant_client.http.models import Filter, FieldCondition, MatchValue
 
 from app.config import get_settings
 from app.embeddings.embedding_service import EmbeddingService

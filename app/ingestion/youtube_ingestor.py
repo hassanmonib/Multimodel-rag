@@ -21,6 +21,7 @@ from app.processing.caption_generator import CaptionGenerator
 from app.processing.diarization_processor import DiarizationProcessor
 from app.processing.keyframe_extractor import KeyframeExtractor
 from app.processing.ocr_processor import OCRProcessor
+from app.services.deepgram_service import transcribe_with_diarization
 from app.services.youtube_service import download_video, get_video_metadata
 from app.utils.image_utils import save_image
 from app.utils.text_utils import merge_text_fields
@@ -64,7 +65,8 @@ class YouTubeIngestor:
         Args:
             youtube_url: Public YouTube video URL.
         """
-        total_steps = 8
+        use_deepgram = bool(self._settings.deepgram_api_key)
+        total_steps = 7 if use_deepgram else 8
         step = 0
 
         def _progress(msg: str):
@@ -93,19 +95,25 @@ class YouTubeIngestor:
         video_path = paths["video_path"]
         audio_path = paths["audio_path"]
 
-        # ── 3. Transcribe ─────────────────────────────────────────────────────
-        yield _progress("Transcribing with Whisper …")
-        transcript_segments = self._transcribe(audio_path)
+        # ── 3. Transcribe (and diarize if using Deepgram) ──────────────────────
+        if use_deepgram:
+            yield _progress("Transcribing with Deepgram (with diarization) …")
+            transcript_segments, diarization_segs = transcribe_with_diarization(
+                audio_path,
+                self._settings.deepgram_api_key,
+                model=self._settings.deepgram_model,
+            )
+        else:
+            yield _progress("Transcribing with Whisper …")
+            transcript_segments = self._transcribe(audio_path)
+            yield _progress("Running speaker diarization …")
+            diarization_segs = self._diarizer.diarize(audio_path)
 
-        # ── 4. Diarize ────────────────────────────────────────────────────────
-        yield _progress("Running speaker diarization …")
-        diarization_segs = self._diarizer.diarize(audio_path)
-
-        # ── 5. Build chunks ───────────────────────────────────────────────────
+        # ── 4. Build chunks ───────────────────────────────────────────────────
         yield _progress("Building transcript chunks …")
         raw_chunks = self._build_chunks(transcript_segments, diarization_segs, video_id)
 
-        # ── 6. Extract keyframes ──────────────────────────────────────────────
+        # ── 5. Extract keyframes ──────────────────────────────────────────────
         yield _progress("Extracting keyframes …")
         keyframes = self._keyframe.extract(video_path)
         frame_dir = str(Path(self._settings.video_frames_dir) / video_id)
@@ -114,11 +122,11 @@ class YouTubeIngestor:
         # Assign nearest keyframe to each chunk
         raw_chunks = self._assign_keyframes(raw_chunks, keyframes, frame_dir, video_id)
 
-        # ── 7. OCR + caption + embed ──────────────────────────────────────────
+        # ── 6. OCR + caption + embed ──────────────────────────────────────────
         yield _progress("Running OCR, captioning, and embedding …")
         db_chunks, pydantic_chunks = self._enrich_and_embed(raw_chunks, video_id, youtube_url)
 
-        # ── 8. Persist to PostgreSQL ──────────────────────────────────────────
+        # ── 7. Persist to PostgreSQL ──────────────────────────────────────────
         yield _progress("Saving to database …")
         video_record = Video(
             id=video_id,
