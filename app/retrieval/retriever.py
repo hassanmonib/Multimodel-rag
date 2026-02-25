@@ -71,13 +71,13 @@ class Retriever:
             )
 
             # ── Text search ───────────────────────────────────────────────────
-            text_hits = self._qdrant.search(
+            text_hits = self._query_vectors(
                 collection_name=collection,
-                query_vector=("text", text_vec),
+                vector=text_vec,
+                vector_name="text",
                 query_filter=qdrant_filter,
                 limit=top_k * 2,
                 score_threshold=score_threshold,
-                with_payload=True,
             )
             for hit in text_hits:
                 result = self._hit_to_result(hit, chunk_type)
@@ -86,13 +86,13 @@ class Retriever:
 
             # ── Image search (if visual intent) ───────────────────────────────
             if image_vec:
-                image_hits = self._qdrant.search(
+                image_hits = self._query_vectors(
                     collection_name=collection,
-                    query_vector=("image", image_vec),
+                    vector=image_vec,
+                    vector_name="image",
                     query_filter=qdrant_filter,
                     limit=top_k,
                     score_threshold=score_threshold,
-                    with_payload=True,
                 )
                 for hit in image_hits:
                     result = self._hit_to_result(hit, chunk_type)
@@ -127,6 +127,42 @@ class Retriever:
         if source_type == SourceType.PDF:
             return [pdf_col]
         return [video_col, pdf_col]
+
+    def _query_vectors(
+        self,
+        collection_name: str,
+        vector: List[float],
+        vector_name: str,
+        query_filter: Optional[Filter],
+        limit: int,
+        score_threshold: float,
+    ) -> List[Any]:
+        """
+        Run vector search. Uses query_points (new API) or search (legacy) depending on client.
+        Returns list of hits with .id, .score, .payload.
+        """
+        if hasattr(self._qdrant, "query_points"):
+            response = self._qdrant.query_points(
+                collection_name=collection_name,
+                query=vector,
+                using=vector_name,
+                query_filter=query_filter,
+                limit=limit,
+                score_threshold=score_threshold if score_threshold > 0 else None,
+                with_payload=True,
+            )
+            # QueryResponse has .points (list of ScoredPoint with id, score, payload)
+            points = getattr(response, "points", None)
+            return list(points) if points else []
+        # Legacy client with .search()
+        return self._qdrant.search(
+            collection_name=collection_name,
+            query_vector=(vector_name, vector),
+            query_filter=query_filter,
+            limit=limit,
+            score_threshold=score_threshold,
+            with_payload=True,
+        )
 
     def _build_filter(self, parsed_query: ParsedQuery) -> Optional[Filter]:
         """Construct a Qdrant metadata filter from parsed query fields."""
