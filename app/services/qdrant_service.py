@@ -80,6 +80,48 @@ def ensure_collections() -> None:
             logger.debug("Qdrant collection already exists: %s", collection_name)
 
 
+def delete_video_chunks(video_id: str) -> None:
+    """
+    Delete all points in the video_chunks collection whose payload video_id matches.
+    Use when re-ingesting a video so old vectors are removed before upserting new ones.
+    """
+    try:
+        try:
+            from qdrant_client.http.models.models import (
+                FieldCondition,
+                Filter,
+                FilterSelector,
+                MatchValue,
+            )
+        except ImportError:
+            from qdrant_client.http.models import (
+                FieldCondition,
+                Filter,
+                FilterSelector,
+                MatchValue,
+            )
+    except ImportError:
+        logger.warning("Could not import Qdrant filter models; skip deleting old video chunks")
+        return
+
+    client = get_qdrant_client()
+    settings = get_settings()
+    client.delete(
+        collection_name=settings.qdrant_video_collection,
+        points_selector=FilterSelector(
+            filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="video_id",
+                        match=MatchValue(value=video_id),
+                    ),
+                ],
+            ),
+        ),
+    )
+    logger.info("Deleted Qdrant points for video_id=%s", video_id)
+
+
 def check_health() -> bool:
     """Return True if Qdrant is reachable, False otherwise."""
     try:

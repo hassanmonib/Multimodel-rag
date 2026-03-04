@@ -151,9 +151,13 @@ class Retriever:
                 score_threshold=score_threshold if score_threshold > 0 else None,
                 with_payload=True,
             )
-            # QueryResponse has .points (list of ScoredPoint with id, score, payload)
-            points = getattr(response, "points", None)
-            return list(points) if points else []
+            # API returns wrapper with .result = QueryResponse; QueryResponse has .points (list of ScoredPoint)
+            # Older clients may return QueryResponse directly with .points
+            result = getattr(response, "result", response)
+            points = getattr(result, "points", None) if result is not None else None
+            if points is not None:
+                return list(points)
+            return []
         # Legacy client with .search()
         return self._qdrant.search(
             collection_name=collection_name,

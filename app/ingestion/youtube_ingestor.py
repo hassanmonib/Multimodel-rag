@@ -11,6 +11,8 @@ import uuid
 from pathlib import Path
 from typing import Callable, Dict, Iterator, List, Optional
 
+from sqlalchemy.exc import IntegrityError
+
 from app.config import get_settings
 from app.database.connection import get_session
 from app.database.repositories import ChunkRepository, VideoRepository
@@ -126,7 +128,7 @@ class YouTubeIngestor:
         yield _progress("Running OCR, captioning, and embedding …")
         db_chunks, pydantic_chunks = self._enrich_and_embed(raw_chunks, video_id, youtube_url)
 
-        # ── 7. Persist to PostgreSQL ──────────────────────────────────────────
+        # ── 7. Persist to PostgreSQL (and Qdrant for re-ingest) ────────────────
         yield _progress("Saving to database …")
         video_record = Video(
             id=video_id,
@@ -137,9 +139,26 @@ class YouTubeIngestor:
             thumbnail_url=meta.get("thumbnail", ""),
         )
         with get_session() as session:
+            from app.services.qdrant_service import delete_video_chunks  # noqa: PLC0415
+
             video_repo = VideoRepository(session)
             chunk_repo = ChunkRepository(session)
-            video_repo.create(video_record)
+            existing = video_repo.get_by_id(video_id)
+            if existing:
+                delete_video_chunks(video_id)
+                video_repo.update(video_record)
+                chunk_repo.delete_by_video_id(video_id)
+                logger.info("Re-ingesting video %s: replaced chunks", video_id)
+            else:
+                try:
+                    video_repo.create(video_record)
+                except IntegrityError:
+                    # UNIQUE on videos.id: row exists from a previous run, do re-ingest
+                    session.rollback()
+                    delete_video_chunks(video_id)
+                    video_repo.update(video_record)
+                    chunk_repo.delete_by_video_id(video_id)
+                    logger.info("Re-ingesting video %s (recovered from UNIQUE): replaced chunks", video_id)
             chunk_repo.bulk_create(db_chunks)
 
         logger.info("Ingestion complete for video %s – %d chunks", video_id, len(db_chunks))

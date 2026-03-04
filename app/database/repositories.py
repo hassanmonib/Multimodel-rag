@@ -30,6 +30,20 @@ class VideoRepository:
         logger.debug("Created Video id=%s", video.id)
         return video
 
+    def update(self, video: Video) -> Video:
+        """Update an existing Video by id. No-op if the video is not in the session."""
+        existing = self.get_by_id(video.id)
+        if existing is None:
+            return self.create(video)
+        existing.youtube_url = video.youtube_url
+        existing.title = video.title
+        existing.channel = video.channel
+        existing.duration_seconds = video.duration_seconds
+        existing.thumbnail_url = video.thumbnail_url
+        self._session.flush()
+        logger.debug("Updated Video id=%s", video.id)
+        return existing
+
     def get_by_id(self, video_id: str) -> Optional[Video]:
         """Return a Video by primary key, or None."""
         return self._session.get(Video, video_id)
@@ -128,6 +142,15 @@ class ChunkRepository:
             .order_by(Chunk.time_start)
         )
         return list(self._session.scalars(stmt).all())
+
+    def delete_by_video_id(self, video_id: str) -> int:
+        """Delete all chunks for the given video. Returns number of rows deleted."""
+        from sqlalchemy import delete
+
+        stmt = delete(Chunk).where(Chunk.video_id == video_id)
+        result = self._session.execute(stmt)
+        self._session.flush()
+        return result.rowcount or 0
 
     def get_by_pdf(self, pdf_id: str) -> List[Chunk]:
         """Return all chunks for a given PDF, ordered by page_number."""
